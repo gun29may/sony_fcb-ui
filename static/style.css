@@ -150,3 +150,28 @@ kbd {
   background: #2a2113; border: 1px solid #5c4519; border-left: 3px solid var(--accent-2);
   color: #f2d9a8; padding: 10px 12px; border-radius: 6px; font-size: 12.5px; line-height: 1.6;
 }
+
+/* --------------------------------------------------------------- network */
+.urlrow {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px;
+  padding: 7px 9px; margin-bottom: 6px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+}
+.urlrow .who { flex: 1 1 auto; font-size: 11px; color: var(--dim); }
+.urlrow code {
+  flex: 1 1 100%; order: 3;                 /* full width on its own line */
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px;
+  color: var(--accent); white-space: nowrap; overflow-x: auto; padding-bottom: 2px;
+}
+.urlrow button {
+  flex: 0 0 auto; padding: 4px 9px; font-size: 11px; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 5px; cursor: pointer; color: var(--dim);
+}
+.urlrow button:hover { color: var(--text); border-color: #3a4552; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  border: 1px solid var(--line); background: var(--panel-2);
+}
+.badge.ok { color: var(--good); border-color: #24603a; }
+.badge.warn { color: var(--accent-2); border-color: #5c4519; }
+.badge.live { color: var(--good); border-color: #24603a; }

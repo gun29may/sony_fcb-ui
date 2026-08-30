@@ -87,8 +87,85 @@ IF_Clear, and a raw VISCA console for anything not exposed as a control.
 **Video** - MJPEG stream with quality and scale options, live OSD overlay,
 snapshot to `captures/`, AVI recording, fullscreen.
 
+**Network** - serve the GUI to the whole local network, with every reachable
+address listed and copyable, plus an ffmpeg feed pushed out to the LAN for
+players and encoders. See below.
+
 **Keyboard** - `+`/`-` zoom, arrow keys focus, `A` auto focus, `F` one-push AF,
 `S` snapshot, `R` record, `0`-`9` recall preset.
+
+## Sharing on the local network
+
+By default the server binds to localhost, so nothing leaves the machine. To
+share it:
+
+```bash
+./run.sh --lan                        # bind 0.0.0.0, print every LAN address
+./run.sh --lan --token s3cret         # ...and require ?token=s3cret
+```
+
+The **Network** tab lists every address the machine can be reached on, ranked
+so the real LAN interface comes first and container bridges are hidden. Each
+entry has Copy and Open buttons, for the GUI and for the raw MJPEG stream.
+
+The stream URL is plain MJPEG over HTTP, so it drops straight into VLC
+(*Media -> Open Network Stream*), OBS (*Browser* or *Media* source), a Home
+Assistant camera, or an `<img>` tag on any page:
+
+```
+http://192.168.1.173:8080/stream.mjpg
+```
+
+With `--token` set, every request must carry it as `?token=...`, an
+`X-Auth-Token` header, or the cookie the server sets after the first
+authenticated page load. Without a token, anyone who can reach the port can
+drive the camera, so the server warns loudly at startup. The token travels in
+the URL and will appear in the request log - it is a LAN convenience, not
+transport security.
+
+If another machine cannot connect, open the port:
+
+```bash
+sudo ufw allow 8080/tcp
+```
+
+## Forwarding the stream to the network
+
+The **Network** tab can also push the live picture onto the LAN with ffmpeg,
+for anything that wants a real video stream rather than MJPEG-over-HTTP.
+Frames are taken from the running capture, so the V4L2 device is still opened
+exactly once and the GUI keeps working while the feed runs.
+
+```bash
+./run.sh --lan --forward udp://239.255.0.1:1234
+```
+
+Then on any machine on the network:
+
+```bash
+vlc udp://@239.255.0.1:1234           # multicast, note the @
+ffplay udp://239.255.0.1:1234
+```
+
+Targets must be `udp://`, `rtp://`, `rtsp://` or `srt://` - the scheme is
+allowlisted on purpose, because the GUI may be reachable from the whole LAN
+and this spawns a process. Unicast to one machine works too and is more
+reliable than multicast over wifi:
+
+```
+udp://192.168.1.50:1234
+```
+
+Codec is MPEG-4 by default (compact, opens everywhere); MJPEG is available if
+you would rather not re-encode. Frame rate, bitrate and scale are adjustable,
+and the panel shows frames sent, uptime and any ffmpeg error.
+
+```bash
+curl -X POST -H 'Content-Type: application/json' \
+     -d '{"url":"udp://239.255.0.1:1234","fps":25,"bitrate":"4M"}' \
+     localhost:8080/api/forward/start
+curl -X POST localhost:8080/api/forward/stop
+```
 
 ## HTTP API
 
@@ -98,6 +175,7 @@ Everything the GUI does is a plain HTTP call, so it scripts easily.
 # state
 curl localhost:8080/api/status
 curl localhost:8080/api/devices
+curl localhost:8080/api/network
 
 # control
 curl -X POST -H 'Content-Type: application/json' \
@@ -134,6 +212,8 @@ driving.
 | `visca.py` | VISCA protocol driver and the FCB command set |
 | `camera.py` | Capture worker with stall detection and auto-reopen |
 | `devices.py` | Device discovery and V4L2 enumeration via raw ioctls |
+| `network.py` | Local-network address discovery and access URLs |
+| `forward.py` | ffmpeg feed pushed onto the LAN |
 | `static/` | The web GUI |
 | `99-fcb-camera.rules` | Optional udev rule for stable names and permissions |
 

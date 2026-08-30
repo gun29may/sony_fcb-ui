@@ -166,6 +166,7 @@ function applyState(status) {
   syncControl($("chkIcr"), state.ir_cut);
 
   showDiagnostics(status.diagnostics || []);
+  renderForward(status.forward);
 
   $("btnRec").classList.toggle("on", !!status.recording);
   $("btnRec").textContent = status.recording ? "Stop recording" : "Record";
@@ -243,6 +244,124 @@ function reloadStream() {
   if (!streamOn) return;
   streamOn = false;
   showStream(true);
+}
+
+/* ---------------------------------------------------------------- network */
+
+/** Copy helper - the async clipboard API needs a secure context, which plain
+ *  http on a LAN address is not, so fall back to a temporary selection. */
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => toast("Copied"),
+                                             () => toast("Could not copy", true));
+    return;
+  }
+  const scratch = document.createElement("textarea");
+  scratch.value = text;
+  scratch.style.position = "fixed";
+  scratch.style.opacity = "0";
+  document.body.appendChild(scratch);
+  scratch.select();
+  try {
+    document.execCommand("copy");
+    toast("Copied");
+  } catch (e) {
+    toast("Could not copy - select it by hand", true);
+  }
+  document.body.removeChild(scratch);
+}
+
+function urlRow(who, url) {
+  const row = document.createElement("div");
+  row.className = "urlrow";
+  const label = document.createElement("span");
+  label.className = "who";
+  label.textContent = who;
+  const code = document.createElement("code");
+  code.textContent = url;
+  code.title = url;
+  const copy = document.createElement("button");
+  copy.textContent = "Copy";
+  copy.addEventListener("click", () => copyText(url));
+  const open = document.createElement("button");
+  open.textContent = "Open";
+  open.addEventListener("click", () => window.open(url, "_blank", "noopener"));
+  row.append(label, code, copy, open);
+  return row;
+}
+
+async function loadNetwork() {
+  let net;
+  try {
+    net = await api("/api/network");
+  } catch (err) {
+    $("netStatus").textContent = "Could not read network info: " + err.message;
+    return;
+  }
+  const status = $("netStatus");
+  status.textContent = "";
+  const badge = document.createElement("span");
+  badge.className = "badge " + (net.shared ? "ok" : "warn");
+  badge.textContent = net.shared ? "Shared on the local network" : "This machine only";
+  status.append(badge, ` \u00a0 host ${net.hostname} \u00b7 port ${net.port}`);
+  if (net.shared) {
+    const lock = document.createElement("span");
+    lock.className = "badge " + (net.protected ? "ok" : "warn");
+    lock.style.marginLeft = "8px";
+    lock.textContent = net.protected ? "token required" : "no token";
+    status.append(lock);
+  }
+
+  const list = $("netUrls");
+  list.innerHTML = "";
+  if (net.shared) {
+    net.urls.forEach((entry) => {
+      list.appendChild(urlRow(entry.interface, entry.gui));
+      list.appendChild(urlRow("stream", entry.stream));
+    });
+    if (!net.urls.length) list.appendChild(urlRow("local", net.local.gui));
+  } else {
+    list.appendChild(urlRow("local", net.local.gui));
+  }
+
+  $("netHint").innerHTML = net.shared
+    ? "Open a GUI link on any machine on this network. The <b>stream</b> link is "
+      + "plain MJPEG - paste it into VLC (Media \u2192 Open Network Stream), OBS "
+      + "(Browser or Media source), or an <code>&lt;img&gt;</code> tag. If a "
+      + "device cannot connect, allow the port: "
+      + "<code>sudo ufw allow " + net.port + "/tcp</code>"
+    : "The server is bound to localhost, so only this machine can reach it. "
+      + "Restart with <code>./run.sh --lan</code> (add <code>--token SECRET</code> "
+      + "to require a password) to share it.";
+}
+
+/* ------------------------------------------------------------- forwarding */
+
+function renderForward(fwd) {
+  const box = $("fwdStatus");
+  box.textContent = "";
+  if (!fwd) {
+    box.textContent = "Not forwarding.";
+    $("btnFwdStart").disabled = false;
+    $("btnFwdStop").disabled = true;
+    return;
+  }
+  const badge = document.createElement("span");
+  badge.className = "badge " + (fwd.running ? "live" : "warn");
+  badge.textContent = fwd.running ? "forwarding" : "stopped";
+  box.append(badge, ` \u00a0 ${fwd.url}`);
+  box.append(document.createElement("br"));
+  box.append(`${fwd.codec} \u00b7 ${fwd.fps} fps \u00b7 ${fwd.bitrate} \u00b7 `
+             + `${fwd.frames} frames sent \u00b7 up ${fwd.uptime}s`);
+  if (fwd.error) {
+    box.append(document.createElement("br"));
+    const err = document.createElement("span");
+    err.style.color = "var(--bad)";
+    err.textContent = fwd.error;
+    box.append(err);
+  }
+  $("btnFwdStart").disabled = !!fwd.running;
+  $("btnFwdStop").disabled = !fwd.running;
 }
 
 /* ----------------------------------------------------------- device setup */
@@ -454,6 +573,32 @@ function init() {
   });
   $("rawCmd").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnRawSend").click(); });
 
+  /* --- network --- */
+  $("fwdFps").addEventListener("input", (e) => ($("fwdFpsVal").textContent = e.target.value));
+  wireButton("btnFwdStart", async () => {
+    const body = {
+      url: $("fwdUrl").value.trim(),
+      codec: $("fwdCodec").value,
+      fps: Number($("fwdFps").value),
+      bitrate: $("fwdBitrate").value.trim() || "4M",
+      scale: Number($("fwdScale").value),
+    };
+    try {
+      const res = await api("/api/forward/start", body);
+      renderForward(res.forward);
+      toast("Forwarding to " + body.url);
+    } catch (err) {
+      toast("Forward failed: " + err.message, true);
+    }
+  });
+  wireButton("btnFwdStop", async () => {
+    try {
+      await api("/api/forward/stop", {});
+      renderForward(null);
+      toast("Forwarding stopped");
+    } catch (err) { toast(err.message, true); }
+  });
+
   /* --- setup --- */
   wireButton("btnRescan", () => rescan().catch((e) => toast(e.message, true)));
   wireButton("btnConnect", connect);
@@ -492,14 +637,22 @@ function init() {
   $("selScale").addEventListener("change", reloadStream);
   $("chkOsd").addEventListener("change", () => { if (!$("chkOsd").checked) $("osd").style.display = "none"; });
 
-  /* --- tabs --- */
-  $("tabs").addEventListener("click", (ev) => {
-    const btn = ev.target.closest("button[data-tab]");
+  /* --- tabs (deep-linkable as #lens, #network, ...) --- */
+  function showTab(name) {
+    const btn = document.querySelector(`#tabs button[data-tab="${name}"]`);
     if (!btn) return;
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll(".tabpage").forEach((p) =>
-      p.classList.toggle("active", p.dataset.page === btn.dataset.tab));
+      p.classList.toggle("active", p.dataset.page === name));
+  }
+  $("tabs").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-tab]");
+    if (!btn) return;
+    showTab(btn.dataset.tab);
+    history.replaceState(null, "", "#" + btn.dataset.tab);
   });
+  window.addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+  if (location.hash.length > 1) showTab(location.hash.slice(1));
 
   /* --- keyboard --- */
   const keyHeld = {};
@@ -528,6 +681,7 @@ function init() {
 
   updateAeEnabling();
   rescan().catch(() => {});
+  loadNetwork().catch(() => {});
   refresh();
   setInterval(refresh, 1000);
 }

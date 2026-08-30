@@ -18,10 +18,13 @@ import threading
 import time
 
 import cv2
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, g, jsonify, request, send_from_directory
 
 import devices
+import forward
+import network
 from camera import VideoSource
+from forward import ForwardError, Forwarder
 from visca import Visca, ViscaError
 
 log = logging.getLogger("fcb")
@@ -48,6 +51,7 @@ class Controller:
         self.state: dict = {}
         self.state_error: str | None = None
         self.diagnostics: list[str] = []
+        self.forwarder: Forwarder | None = None
         self.last_error: str | None = None
         self._lock = threading.Lock()
         self._poller: threading.Thread | None = None
@@ -109,6 +113,7 @@ class Controller:
             self.disconnect_locked()
 
     def disconnect_locked(self) -> None:
+        self.stop_forward()
         self.stop_recording()
         self._stop_poll.set()
         if self._poller and self._poller.is_alive():
@@ -202,9 +207,35 @@ class Controller:
         path, self._record_path = self._record_path, None
         return path
 
+    # ------------------------------------------------------------ forwarding
+
+    def start_forward(self, opts: dict) -> dict:
+        self.stop_forward()
+        sender = Forwarder(
+            self.video,
+            url=opts.get("url", ""),
+            fps=int(opts.get("fps", 25)),
+            quality=int(opts.get("quality", 80)),
+            scale=float(opts.get("scale", 1.0)),
+            codec=opts.get("codec", "mpeg4"),
+            bitrate=opts.get("bitrate", "4M"),
+        )
+        sender.start()
+        self.forwarder = sender
+        return sender.status()
+
+    def stop_forward(self) -> dict | None:
+        sender, self.forwarder = self.forwarder, None
+        if sender is None:
+            return None
+        status = sender.status()
+        sender.stop()
+        return status
+
     def status(self) -> dict:
         return {
             "video": self.video.status() if self.video else None,
+            "forward": self.forwarder.status() if self.forwarder else None,
             "visca": {**self.camera_info, "connected": bool(self.visca and self.visca.connected)}
                      if self.camera_info else {"connected": False},
             "state": self.state,
@@ -216,6 +247,34 @@ class Controller:
 
 ctl = Controller()
 app = Flask(__name__, static_folder=None)
+
+# Set by --token. When present every request must carry it, so putting the GUI
+# on the LAN does not hand camera control to everyone on the network.
+AUTH_TOKEN: str | None = None
+BIND_HOST = "127.0.0.1"
+BIND_PORT = 8080
+
+
+@app.before_request
+def _require_token():
+    if not AUTH_TOKEN:
+        return None
+    supplied = (request.args.get("token")
+                or request.headers.get("X-Auth-Token")
+                or request.cookies.get("fcb_token"))
+    if supplied == AUTH_TOKEN:
+        # Remember it so the browser does not need ?token= on every asset.
+        g.set_token_cookie = request.args.get("token") == AUTH_TOKEN
+        return None
+    return Response("unauthorized - append ?token=... to the URL\n", 401,
+                    {"Content-Type": "text/plain"})
+
+
+@app.after_request
+def _persist_token(response):
+    if getattr(g, "set_token_cookie", False):
+        response.set_cookie("fcb_token", AUTH_TOKEN, httponly=True, samesite="Lax")
+    return response
 
 
 # ---------------------------------------------------------------- VISCA API
@@ -401,6 +460,27 @@ def api_capture():
     return jsonify(ok=True, path=path)
 
 
+@app.get("/api/network")
+def api_network():
+    return jsonify(network.summary(BIND_PORT, BIND_HOST, AUTH_TOKEN))
+
+
+@app.post("/api/forward/<verb>")
+def api_forward(verb: str):
+    try:
+        if verb == "start":
+            payload = request.get_json(silent=True) or {}
+            return jsonify(ok=True, forward=ctl.start_forward(payload))
+        if verb == "stop":
+            return jsonify(ok=True, forward=ctl.stop_forward())
+    except ForwardError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
+    except Exception as exc:
+        log.exception("forward failed")
+        return jsonify(ok=False, error=str(exc)), 500
+    return jsonify(ok=False, error="use start or stop"), 404
+
+
 @app.post("/api/record/<verb>")
 def api_record(verb: str):
     try:
@@ -427,8 +507,19 @@ def static_files(filename: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Sony FCB camera web GUI")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="address to bind (default: localhost only)")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--lan", action="store_true",
+                        help="serve to the whole local network (binds 0.0.0.0)")
+    parser.add_argument("--token", help="require ?token=... from every client; "
+                                        "strongly recommended with --lan")
+    parser.add_argument("--forward", metavar="URL",
+                        help="also push the stream to the network on start, "
+                             "e.g. udp://239.255.0.1:1234")
+    parser.add_argument("--forward-fps", type=int, default=25)
+    parser.add_argument("--forward-codec", default="mpeg4", choices=sorted(forward.CODECS))
+    parser.add_argument("--forward-bitrate", default="4M")
     parser.add_argument("--video", help="force a video node, e.g. /dev/video3")
     parser.add_argument("--serial", help="force a VISCA port, e.g. /dev/ttyACM0")
     parser.add_argument("--width", type=int, default=1920)
@@ -442,6 +533,11 @@ def main():
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+
+    global AUTH_TOKEN, BIND_HOST, BIND_PORT
+    host = "0.0.0.0" if args.lan else args.host
+    AUTH_TOKEN = args.token
+    BIND_HOST, BIND_PORT = host, args.port
 
     if not args.no_autoconnect:
         found = devices.autodetect()
@@ -467,8 +563,34 @@ def main():
         else:
             log.warning("no camera found yet - plug it in and press Connect in the GUI")
 
-    log.info("GUI ready on http://%s:%d", args.host if args.host != "0.0.0.0" else "localhost", args.port)
-    app.run(host=args.host, port=args.port, threaded=True, debug=False, use_reloader=False)
+    if args.forward:
+        try:
+            status = ctl.start_forward({
+                "url": args.forward, "fps": args.forward_fps,
+                "codec": args.forward_codec, "bitrate": args.forward_bitrate,
+            })
+            log.info("forwarding to %s", status["url"])
+        except ForwardError as exc:
+            log.warning("forward not started: %s", exc)
+
+    _print_access_banner(host, args.port)
+    app.run(host=host, port=args.port, threaded=True, debug=False, use_reloader=False)
+
+
+def _print_access_banner(host: str, port: int) -> None:
+    """Tell the user every address this server can be reached on."""
+    info = network.summary(port, host, AUTH_TOKEN)
+    log.info("GUI ready on %s", info["local"]["gui"])
+    if not info["shared"]:
+        log.info("This machine only. Use --lan to share it on the local network.")
+        return
+    for entry in info["urls"]:
+        log.info("  LAN (%s): %s", entry["interface"], entry["gui"])
+        log.info("       stream: %s", entry["stream"])
+    if not AUTH_TOKEN:
+        log.warning("Serving to the whole local network with no token - anyone "
+                    "who can reach this port can drive the camera. Add "
+                    "--token SECRET to require one.")
 
 
 if __name__ == "__main__":

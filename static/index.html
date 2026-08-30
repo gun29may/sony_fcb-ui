@@ -60,6 +60,7 @@
       <button data-tab="image">Image</button>
       <button data-tab="presets">Presets</button>
       <button data-tab="system">System</button>
+      <button data-tab="network">Network</button>
       <button data-tab="setup">Setup</button>
     </nav>
 
@@ -236,6 +237,50 @@
           <button class="btn" id="btnRawSend">Send</button>
         </div>
         <div class="console" id="rawLog">Ready. Type a VISCA packet in hex and press Send.</div>
+      </div>
+    </div>
+
+    <!-- NETWORK -->
+    <div class="tabpage" data-page="network">
+      <div class="group">
+        <h3>Access from other machines</h3>
+        <div id="netStatus" class="hint">Checking&hellip;</div>
+        <div id="netUrls"></div>
+        <p class="hint" id="netHint"></p>
+      </div>
+
+      <div class="group">
+        <h3>Forward stream to the network</h3>
+        <p class="hint">Pushes the live picture out with ffmpeg so players and
+        encoders on the LAN can subscribe. The camera is still opened only once,
+        so this runs alongside the GUI stream.</p>
+        <div class="row">
+          <label>Target</label>
+          <input type="text" id="fwdUrl" value="udp://239.255.0.1:1234?pkt_size=1316"
+                 spellcheck="false" placeholder="udp://239.255.0.1:1234">
+        </div>
+        <div class="row">
+          <label>Codec</label>
+          <select id="fwdCodec">
+            <option value="mpeg4">MPEG-4 (compact)</option>
+            <option value="mjpeg">MJPEG (no re-encode loss)</option>
+          </select>
+        </div>
+        <div class="row"><label>Frame rate</label><input type="range" id="fwdFps" min="1" max="60" value="25"><span class="val" id="fwdFpsVal">25</span></div>
+        <div class="row"><label>Bitrate</label><input type="text" id="fwdBitrate" value="4M" spellcheck="false"></div>
+        <div class="row">
+          <label>Scale</label>
+          <select id="fwdScale">
+            <option value="1">Full size</option>
+            <option value="0.75">75%</option>
+            <option value="0.5">50%</option>
+          </select>
+        </div>
+        <div class="grid2">
+          <button class="btn primary" id="btnFwdStart">Start forwarding</button>
+          <button class="btn danger" id="btnFwdStop">Stop</button>
+        </div>
+        <div id="fwdStatus" class="hint">Not forwarding.</div>
       </div>
     </div>
 
