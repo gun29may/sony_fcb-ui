@@ -1,0 +1,6 @@
+# Sony FCB block on a Twiga USB3 NeoHD interface board.
+# Install with:  sudo cp 99-fcb-camera.rules /etc/udev/rules.d/ && sudo udevadm control --reload
+# Gives the video + VISCA nodes to the "video" and "dialout" groups and adds
+# stable symlinks /dev/fcb-visca and /dev/fcb-video.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="00f9", GROUP="dialout", MODE="0660", SYMLINK+="fcb-visca"
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="00f9", GROUP="video", MODE="0660", SYMLINK+="fcb-video%n"

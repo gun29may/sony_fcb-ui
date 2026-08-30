@@ -1,0 +1,8 @@
+# Snapshots and recordings made by the GUI - local media, never committed.
+captures/
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log

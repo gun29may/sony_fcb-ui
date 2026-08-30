@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sony FCB Camera Control</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Sony FCB <span>&mdash; camera control</span></h1>
+  <div class="pills">
+    <span class="pill"><i class="dot" id="dotVideo"></i> Video <b id="pillVideo">-</b></span>
+    <span class="pill"><i class="dot" id="dotVisca"></i> VISCA <b id="pillVisca">-</b></span>
+    <span class="pill">Model <b id="pillModel">-</b></span>
+    <span class="pill">FPS <b id="pillFps">-</b></span>
+  </div>
+</header>
+
+<main>
+  <!-- ------------------------------------------------------------ video -->
+  <div id="diagnostics" style="display:none"></div>
+
+  <section class="stage">
+    <div class="frame" id="frame">
+      <div class="placeholder" id="placeholder">
+        No video stream.<br>Plug in the camera, then open <b>Setup</b> &rarr; <b>Connect</b>.
+      </div>
+      <img id="video" style="display:none" alt="camera stream">
+      <div class="osd" id="osd" style="display:none"></div>
+    </div>
+    <div class="stagebar">
+      <button class="btn" id="btnSnap">Snapshot</button>
+      <button class="btn rec" id="btnRec">Record</button>
+      <button class="btn" id="btnFullscreen">Fullscreen</button>
+      <label class="toggle" title="Show a live readout over the picture">
+        <input type="checkbox" id="chkOsd" checked><span class="sw"></span>OSD
+      </label>
+      <span class="spacer"></span>
+      <label style="font-size:12px;color:var(--dim)">Quality</label>
+      <select id="selQuality" style="flex:0 0 92px">
+        <option value="60">Low</option>
+        <option value="80" selected>Normal</option>
+        <option value="92">High</option>
+      </select>
+      <select id="selScale" style="flex:0 0 92px">
+        <option value="0.5">50%</option>
+        <option value="0.75">75%</option>
+        <option value="1" selected>100%</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- controls -->
+  <section class="panel">
+    <nav class="tabs" id="tabs">
+      <button data-tab="lens" class="active">Lens</button>
+      <button data-tab="exposure">Exposure</button>
+      <button data-tab="image">Image</button>
+      <button data-tab="presets">Presets</button>
+      <button data-tab="system">System</button>
+      <button data-tab="setup">Setup</button>
+    </nav>
+
+    <!-- LENS -->
+    <div class="tabpage active" data-page="lens">
+      <div class="group">
+        <h3>Zoom</h3>
+        <div class="grid2">
+          <button class="btn big" id="zoomWide" title="Zoom out (hold)">&minus; Wide</button>
+          <button class="btn big" id="zoomTele" title="Zoom in (hold)">Tele +</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label>Speed</label>
+          <input type="range" id="zoomSpeed" min="0" max="7" value="4">
+          <span class="val" id="zoomSpeedVal">4</span>
+        </div>
+        <div class="row">
+          <label>Position</label>
+          <input type="range" id="zoomPos" min="0" max="16384" value="0">
+          <span class="val" id="zoomPosVal">-</span>
+        </div>
+        <div class="grid3">
+          <button class="btn" data-zoomto="0">Wide end</button>
+          <button class="btn" data-zoomto="8192">Mid</button>
+          <button class="btn" data-zoomto="16384">Tele end</button>
+        </div>
+        <label class="toggle"><input type="checkbox" id="chkDzoom"><span class="sw"></span>Digital zoom</label>
+      </div>
+
+      <div class="group">
+        <h3>Focus</h3>
+        <label class="toggle"><input type="checkbox" id="chkAf" checked><span class="sw"></span>Auto focus</label>
+        <div class="grid2">
+          <button class="btn big" id="focusNear" title="Focus nearer (hold)">Near</button>
+          <button class="btn big" id="focusFar" title="Focus further (hold)">Far</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label>Position</label>
+          <input type="range" id="focusPos" min="4096" max="49152" value="4096">
+          <span class="val" id="focusPosVal">-</span>
+        </div>
+        <div class="grid2">
+          <button class="btn" id="btnOnePushAf">One-push AF</button>
+          <select id="selAfMode" title="Auto focus mode">
+            <option value="0">AF: normal</option>
+            <option value="1">AF: interval</option>
+            <option value="2">AF: zoom trigger</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPOSURE -->
+    <div class="tabpage" data-page="exposure">
+      <div class="group">
+        <h3>Auto exposure</h3>
+        <div class="row">
+          <label>AE mode</label>
+          <select id="selAe">
+            <option value="auto">Full auto</option>
+            <option value="manual">Manual</option>
+            <option value="shutter">Shutter priority</option>
+            <option value="iris">Iris priority</option>
+            <option value="bright">Bright</option>
+          </select>
+        </div>
+        <div class="row"><label>Shutter</label><input type="range" id="rngShutter" min="0" max="21" value="10"><span class="val" id="valShutter">-</span></div>
+        <div class="row"><label>Iris</label><input type="range" id="rngIris" min="0" max="17" value="10"><span class="val" id="valIris">-</span></div>
+        <div class="row"><label>Gain</label><input type="range" id="rngGain" min="0" max="15" value="0"><span class="val" id="valGain">-</span></div>
+        <div class="row"><label>Bright</label><input type="range" id="rngBright" min="0" max="31" value="10"><span class="val" id="valBright">-</span></div>
+        <div class="row"><label>Gain limit</label><input type="range" id="rngGainLimit" min="4" max="15" value="15"><span class="val" id="valGainLimit">15</span></div>
+      </div>
+      <div class="group">
+        <h3>Compensation</h3>
+        <label class="toggle"><input type="checkbox" id="chkExpComp"><span class="sw"></span>Exposure compensation</label>
+        <div class="row"><label>Level</label><input type="range" id="rngExpComp" min="0" max="14" value="7"><span class="val" id="valExpComp">-</span></div>
+        <label class="toggle"><input type="checkbox" id="chkBacklight"><span class="sw"></span>Backlight compensation</label>
+        <label class="toggle"><input type="checkbox" id="chkWdr"><span class="sw"></span>Wide dynamic range</label>
+        <label class="toggle"><input type="checkbox" id="chkSlowShutter"><span class="sw"></span>Auto slow shutter</label>
+        <label class="toggle"><input type="checkbox" id="chkHighSens"><span class="sw"></span>High sensitivity</label>
+      </div>
+      <div class="group">
+        <h3>White balance</h3>
+        <div class="row">
+          <label>Mode</label>
+          <select id="selWb">
+            <option value="auto">Auto</option>
+            <option value="atw">Auto tracing</option>
+            <option value="indoor">Indoor 3200K</option>
+            <option value="outdoor">Outdoor 5800K</option>
+            <option value="onepush">One push</option>
+            <option value="manual">Manual</option>
+            <option value="sodium">Sodium lamp</option>
+          </select>
+        </div>
+        <button class="btn wide" id="btnWbTrigger">One-push white balance</button>
+        <div class="row" style="margin-top:8px"><label>R gain</label><input type="range" id="rngRGain" min="0" max="255" value="128"><span class="val" id="valRGain">-</span></div>
+        <div class="row"><label>B gain</label><input type="range" id="rngBGain" min="0" max="255" value="128"><span class="val" id="valBGain">-</span></div>
+      </div>
+    </div>
+
+    <!-- IMAGE -->
+    <div class="tabpage" data-page="image">
+      <div class="group">
+        <h3>Picture</h3>
+        <div class="row"><label>Sharpness</label><input type="range" id="rngAperture" min="0" max="15" value="6"><span class="val" id="valAperture">-</span></div>
+        <div class="row"><label>Noise red.</label><input type="range" id="rngNr" min="0" max="5" value="2"><span class="val" id="valNr">2</span></div>
+        <div class="row"><label>Gamma</label><input type="range" id="rngGamma" min="0" max="7" value="0"><span class="val" id="valGamma">0</span></div>
+        <div class="row"><label>Chroma sup.</label><input type="range" id="rngChroma" min="0" max="3" value="0"><span class="val" id="valChroma">0</span></div>
+        <div class="row">
+          <label>Effect</label>
+          <select id="selEffect">
+            <option value="off">Off</option>
+            <option value="bw">Black &amp; white</option>
+            <option value="negative">Negative</option>
+          </select>
+        </div>
+      </div>
+      <div class="group">
+        <h3>Orientation &amp; filters</h3>
+        <label class="toggle"><input type="checkbox" id="chkMirror"><span class="sw"></span>Mirror (L/R reverse)</label>
+        <label class="toggle"><input type="checkbox" id="chkFlip"><span class="sw"></span>Flip (vertical)</label>
+        <label class="toggle"><input type="checkbox" id="chkFreeze"><span class="sw"></span>Freeze frame</label>
+        <label class="toggle"><input type="checkbox" id="chkStab"><span class="sw"></span>Image stabiliser</label>
+        <label class="toggle"><input type="checkbox" id="chkDefog"><span class="sw"></span>Defog</label>
+        <label class="toggle"><input type="checkbox" id="chkIcr"><span class="sw"></span>IR-cut removed (night mode)</label>
+        <label class="toggle"><input type="checkbox" id="chkAutoIcr"><span class="sw"></span>Auto ICR (day/night)</label>
+      </div>
+    </div>
+
+    <!-- PRESETS -->
+    <div class="tabpage" data-page="presets">
+      <div class="group">
+        <h3>Memory presets</h3>
+        <p class="hint">Click a slot to recall it. <b>Set</b> stores the current zoom, focus, exposure and white balance into the selected slot.</p>
+        <div class="grid4" id="presetGrid"></div>
+        <div class="row" style="margin-top:10px">
+          <label>Slot</label>
+          <input type="number" id="presetSlot" min="0" max="15" value="0" style="flex:0 0 70px">
+          <button class="btn" id="btnPresetSet">Set</button>
+          <button class="btn danger" id="btnPresetReset">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SYSTEM -->
+    <div class="tabpage" data-page="system">
+      <div class="group">
+        <h3>On-screen menu</h3>
+        <div class="grid2">
+          <button class="btn" id="btnMenuOn">Open menu</button>
+          <button class="btn" id="btnMenuOff">Close menu</button>
+        </div>
+        <div class="navpad" style="margin-top:10px">
+          <span class="blank"></span><button class="btn" data-nav="up">&#9650;</button><span class="blank"></span>
+          <button class="btn" data-nav="left">&#9664;</button>
+          <button class="btn" data-nav="enter">OK</button>
+          <button class="btn" data-nav="right">&#9654;</button>
+          <span class="blank"></span><button class="btn" data-nav="down">&#9660;</button><span class="blank"></span>
+        </div>
+      </div>
+      <div class="group">
+        <h3>Power</h3>
+        <div class="grid2">
+          <button class="btn" id="btnPowerOn">Power on</button>
+          <button class="btn danger" id="btnPowerOff">Standby</button>
+        </div>
+        <button class="btn wide" id="btnIfClear" style="margin-top:8px">IF_Clear (reset VISCA link)</button>
+      </div>
+      <div class="group">
+        <h3>VISCA console</h3>
+        <div class="row">
+          <input type="text" id="rawCmd" placeholder="81 09 04 47 FF" spellcheck="false">
+          <button class="btn" id="btnRawSend">Send</button>
+        </div>
+        <div class="console" id="rawLog">Ready. Type a VISCA packet in hex and press Send.</div>
+      </div>
+    </div>
+
+    <!-- SETUP -->
+    <div class="tabpage" data-page="setup">
+      <div class="group">
+        <h3>Devices</h3>
+        <div class="row"><label>Video</label><select id="selVideo"></select></div>
+        <div class="row"><label>Format</label><select id="selFormat"></select></div>
+        <div class="row"><label>Resolution</label><select id="selRes"></select></div>
+        <div class="row"><label>VISCA port</label><select id="selSerial"></select></div>
+        <div class="row">
+          <label>Baud</label>
+          <select id="selBaud">
+            <option value="9600" selected>9600</option>
+            <option value="19200">19200</option>
+            <option value="38400">38400</option>
+            <option value="115200">115200</option>
+          </select>
+        </div>
+        <label class="toggle"><input type="checkbox" id="chkAutobaud" checked><span class="sw"></span>Auto-detect baud rate</label>
+        <div class="grid2" style="margin-top:8px">
+          <button class="btn" id="btnRescan">Rescan</button>
+          <button class="btn primary" id="btnConnect">Connect</button>
+        </div>
+        <button class="btn wide danger" id="btnDisconnect" style="margin-top:8px">Disconnect</button>
+      </div>
+      <div class="group">
+        <h3>Lens type</h3>
+        <div class="row">
+          <label>Optical</label>
+          <select id="selLens">
+            <option value="10">10x block</option>
+            <option value="20">20x block</option>
+            <option value="30" selected>30x block</option>
+          </select>
+        </div>
+        <p class="hint">Only affects the approximate magnification shown next to the zoom slider.</p>
+      </div>
+      <div class="group">
+        <h3>Keyboard</h3>
+        <p class="hint">
+          <kbd>+</kbd>/<kbd>-</kbd> zoom &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> focus &nbsp;
+          <kbd>A</kbd> auto focus &nbsp; <kbd>F</kbd> one-push AF<br>
+          <kbd>S</kbd> snapshot &nbsp; <kbd>R</kbd> record &nbsp; <kbd>0</kbd>-<kbd>9</kbd> recall preset
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
